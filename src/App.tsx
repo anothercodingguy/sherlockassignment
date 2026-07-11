@@ -51,15 +51,33 @@ async function localVisualSimilarity(referenceUrl: string, video: HTMLVideoEleme
 function ParticipantTile({ participant, localVideo }: { participant: Participant; localVideo?: React.RefObject<HTMLVideoElement | null> }) {
   const isCandidateLeader = participant.id === 'p-rahul';
   return <article className={`participant-tile ${isCandidateLeader ? 'candidate-tile' : ''}`}>
-    {localVideo ? <video ref={localVideo} autoPlay muted playsInline className="local-video" /> : <div className="avatar" aria-hidden="true">{initials(participant.displayName)}</div>}
+    {localVideo ? (
+      <video ref={localVideo} autoPlay muted playsInline className="local-video" />
+    ) : (
+      <div className="avatar" aria-hidden="true">{initials(participant.displayName)}</div>
+    )}
     <div className="tile-shade" />
     <div className="tile-top">
-      {participant.media.webcamOn ? <span className="chip chip-live">camera</span> : <span className="chip">camera off</span>}
+      <div className="tile-badges">
+        {participant.media.webcamOn ? (
+          <span className="badge badge-camera active">
+            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="3" style={{marginRight: 4}}>
+              <path d="M23 7l-7 5 7 5V7z" />
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            </svg>
+            <span>Live</span>
+          </span>
+        ) : (
+          <span className="badge badge-camera">
+            <span>CAM OFF</span>
+          </span>
+        )}
+      </div>
       {participant.speakingSeconds > 0 && <span className="speaking-dot" title="Speaking activity observed" />}
     </div>
     <div className="tile-bottom">
-      <strong>{participant.displayName}</strong>
-      <span>{participant.email ?? (localVideo ? 'local browser stream' : 'meeting participant')}</span>
+      <strong className="displayName">{participant.displayName}</strong>
+      <span className="subtext">{participant.email ?? (localVideo ? 'Local browser feed' : 'Audio feed only')}</span>
     </div>
   </article>;
 }
@@ -229,110 +247,269 @@ export default function App() {
   const nonLeaders = useMemo(() => snapshot?.decision.alternatives.slice(1, 3) ?? [], [snapshot]);
   const timeline = history.map((point, index) => `${(index / Math.max(1, history.length - 1)) * 100},${100 - point.confidence * 88}`).join(' ');
 
-  if (!snapshot) return <main className="loading"><div className="loading-mark">S</div><p>{apiState === 'error' ? error : 'Starting secure meeting sandbox…'}</p><button onClick={() => void reset()}>Retry</button></main>;
+  if (!snapshot) {
+    return <main className="loading">
+      <div className="loading-mark">S</div>
+      <p>{apiState === 'error' ? error : 'Starting secure meeting sandbox…'}</p>
+      <button onClick={() => void reset()}>Retry</button>
+    </main>;
+  }
 
   const { decision } = snapshot;
+  const hasIndependentSupport = (leader?.supportedCategories.length ?? 0) >= 2;
+
   return <main className="app-shell">
     <header className="topbar">
-      <div className="brand"><span className="brand-mark">S</span><span>Sherlock <small>Candidate Identity</small></span></div>
-      <div className="top-status"><span className={`api-dot ${apiState}`} /> Local event stream <span className="divider" /> Session {snapshot.id.slice(0, 8)}</div>
-      <button className="quiet-button" onClick={() => void reset()}>Reset session</button>
+      <div className="brand">
+        <span className="brand-mark">S</span>
+        <span>Sherlock <small>Biometric Guard</small></span>
+      </div>
+      <div className="top-status">
+        <span className={`api-dot ${apiState}`} /> 
+        <span>Sandbox Connected</span> 
+        <span className="divider">·</span> 
+        <span className="session-pill">Session {snapshot.id.slice(0, 8)}</span>
+      </div>
+      <button className="quiet-button reset-button" onClick={() => void reset()}>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" style={{marginRight: 6}}>
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l.73-.73" />
+        </svg>
+        <span>Reset Session</span>
+      </button>
     </header>
 
     {error && <div className="error-banner">{error}<button onClick={() => setError(undefined)}>Dismiss</button></div>}
 
-    <section className="hero-row">
-      <div>
-        <p className="eyebrow">Live meeting sandbox</p>
-        <h1>Identify the human behind the meeting tile.</h1>
-        <p className="lede">Signals update continuously. Sherlock only targets detectors when the identity is genuinely supported.</p>
-      </div>
-      <div className={`decision-hero ${decision.status}`}>
-        <span className="status-kicker">{statusLabel[decision.status]}</span>
-        <strong>{percentage(decision.confidence)}</strong>
-        <span>confidence · {percentage(Math.max(0, decision.margin))} separation</span>
-      </div>
-    </section>
+    <div className="workspace-container">
+      {/* LEFT COLUMN: Main Canvas */}
+      <section className="main-canvas">
+        {/* HERO AREA */}
+        <header className="canvas-header">
+          <div className="title-area">
+            <span className="eyebrow">Identity Engine</span>
+            <h1>Biometric Verification</h1>
+            <p className="lede">Real-time candidate identity scoring system. Continuous multi-signal checks route automatically once verification gates are cleared.</p>
+          </div>
+          <div className={`decision-hero ${decision.status}`}>
+            <span className="status-kicker">{statusLabel[decision.status]}</span>
+            <div className="metrics-row">
+              <strong className="confidence-value">{percentage(decision.confidence)}</strong>
+              <div className="metrics-sub">
+                <span className="confidence-label">confidence</span>
+                <span className="margin-value">+{percentage(Math.max(0, decision.margin))} separation</span>
+              </div>
+            </div>
+          </div>
+        </header>
 
-    <section className="meeting-layout">
-      <div className="meeting-stage card">
-        <div className="section-heading"><div><p className="eyebrow">Participant media</p><h2>Interview room</h2></div><span className="participant-count">{snapshot.participants.filter((p) => !p.leftAt).length} participants</span></div>
-        <div className="participant-grid">
-          {snapshot.participants.filter((participant) => !participant.leftAt).map((participant) => <ParticipantTile key={participant.id} participant={participant} localVideo={participant.id === 'p-rahul' ? videoRef : undefined} />)}
-        </div>
-        <div className="stage-footer">
-          <span className={mediaState === 'active' ? 'camera-active' : ''}>{mediaState === 'active' ? 'Local camera and VAD active' : mediaState === 'denied' ? 'Media permission unavailable — simulator remains usable' : 'Local stream is optional'}</span>
-          <button className="primary-button" onClick={() => void startCamera()} disabled={mediaState === 'active'}>{mediaState === 'active' ? 'Camera connected' : 'Enable camera & mic'}</button>
-        </div>
-      </div>
+        {/* MEETING ROOM */}
+        <div className="meeting-stage-card card">
+          <header className="card-header">
+            <div className="header-title">
+              <span className="status-indicator-active"></span>
+              <h2>Active Meeting Room</h2>
+            </div>
+            <span className="participant-count-pill">{snapshot.participants.filter((p) => !p.leftAt).length} Active Tiles</span>
+          </header>
 
-      <aside className={`decision-card card ${decision.status}`}>
-        <p className="eyebrow">Detector routing</p>
-        <h2>{decision.detectorTargetParticipantId ? `Target: ${snapshot.participants.find((p) => p.id === decision.detectorTargetParticipantId)?.displayName}` : 'No participant target'}</h2>
-        <p>{decision.reason}</p>
-        <div className="thresholds"><span>Gate</span><span>≥ {percentage(decisionThresholds.confidence)} confidence</span><span>≥ {percentage(decisionThresholds.margin)} margin</span><span>2 evidence categories</span></div>
-        <div className="confidence-chart" aria-label="Confidence over time">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={timeline || '0,100 100,100'} /></svg>
-          <small>Live confidence history</small>
+          <div className="participant-grid">
+            {snapshot.participants.filter((participant) => !participant.leftAt).map((participant) => (
+              <ParticipantTile key={participant.id} participant={participant} localVideo={participant.id === 'p-rahul' ? videoRef : undefined} />
+            ))}
+          </div>
+
+          <footer className="stage-footer">
+            <div className="media-status-wrapper">
+              <span className={`status-dot ${mediaState === 'active' ? 'active' : ''}`}></span>
+              <span>{mediaState === 'active' ? 'Camera & Voice Activity Detector Active' : 'Local media input is optional'}</span>
+            </div>
+            <button className="primary-button media-toggle-btn" onClick={() => void startCamera()} disabled={mediaState === 'active'}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" style={{marginRight: 6}}>
+                <path d="M23 7l-7 5 7 5V7z" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+              {mediaState === 'active' ? 'Camera Connected' : 'Connect Camera & Mic'}
+            </button>
+          </footer>
+        </div>
+
+        {/* DETECTOR STATUS ROUTING CARD */}
+        <div className={`decision-status-card card ${decision.status}`}>
+          <header className="card-header">
+            <h2>Detector Routing Target</h2>
+            <div className={`status-badge ${decision.status}`}>
+              {statusLabel[decision.status]}
+            </div>
+          </header>
+          
+          <div className="decision-info-row">
+            <div className="decision-target-display">
+              <span className="label">Assigned Target</span>
+              <strong className="target-name">
+                {decision.detectorTargetParticipantId 
+                  ? snapshot.participants.find((p) => p.id === decision.detectorTargetParticipantId)?.displayName 
+                  : 'No Target Assigned'}
+              </strong>
+              <p className="reason-text">{decision.reason}</p>
+            </div>
+            
+            <div className="decision-gates-list">
+              <span className="label">Verification Gates</span>
+              <ul className="gates">
+                <li className={leader && leader.posterior >= decisionThresholds.confidence ? 'passed' : 'failed'}>
+                  <span className="checkbox-icon"></span>
+                  <span>Confidence &ge; {percentage(decisionThresholds.confidence)}</span>
+                </li>
+                <li className={decision.margin >= decisionThresholds.margin ? 'passed' : 'failed'}>
+                  <span className="checkbox-icon"></span>
+                  <span>Margin &ge; {percentage(decisionThresholds.margin)}</span>
+                </li>
+                <li className={hasIndependentSupport ? 'passed' : 'failed'}>
+                  <span className="checkbox-icon"></span>
+                  <span>&ge; 2 Independent Categories</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <footer className="decision-footer">
+            <div className="confidence-chart">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points={timeline || '0,100 100,100'} /></svg>
+            </div>
+            <div className="chart-label">Real-time Biometric Confidence Stream</div>
+          </footer>
+        </div>
+      </section>
+
+      {/* RIGHT COLUMN: Sidebar controls & Signals panel */}
+      <aside className="workspace-sidebar">
+        {/* GROUP 1: BIOMETRIC ANALYSIS */}
+        <div className="sidebar-group">
+          <div className="group-header">Biometric Analysis</div>
+          
+          {/* RANK LADDER */}
+          <div className="sidebar-card card">
+            <h3>Probability Ranking</h3>
+            <ol className="rank-list">
+              {snapshot.decision.alternatives.map((rank, index) => (
+                <li key={rank.participantId} className={index === 0 ? 'leader' : ''}>
+                  <span className="rank-badge">{index + 1}</span>
+                  <div className="rank-details">
+                    <span className="name">{rank.displayName}</span>
+                    <span className="categories">{rank.supportedCategories.length ? rank.supportedCategories.join(' · ') : 'No positive evidence'}</span>
+                  </div>
+                  <span className="probability-score">{percentage(rank.posterior)}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {/* EVIDENCE LEDGER */}
+          <div className="sidebar-card card">
+            <h3>Evidence Ledger</h3>
+            {decision.evidence.length ? (
+              <ul className="evidence-list">
+                {decision.evidence.map((item) => <EvidenceRow key={`${item.id}-${item.impact}`} item={item} />)}
+              </ul>
+            ) : (
+              <p className="empty-state">Awaiting meeting events to gather evidence...</p>
+            )}
+            {nonLeaders.length > 0 && (
+              <div className="why-not">
+                <h4>Why not alternatives?</h4>
+                {nonLeaders.map((participant) => (
+                  <div key={participant.participantId} className="alternative-item">
+                    <strong>{participant.displayName}</strong>: {participant.evidence.filter((item) => item.impact < 0).map((item) => item.label).join(', ') || 'Insufficient signal'}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* GROUP 2: SIMULATION & INPUTS */}
+        <div className="sidebar-group">
+          <div className="group-header">Simulators & Playground</div>
+          
+          {/* SCENARIOS */}
+          <div className="sidebar-card card">
+            <h3>Inject Scenarios</h3>
+            <div className="scenario-list">
+              {demoScenarios.map((scenario) => (
+                <button key={scenario.id} className="scenario-button" disabled={Boolean(scenarioRunning)} onClick={() => void runScenario(scenario.id)}>
+                  <div className="scenario-text">
+                    <strong>{scenario.label}</strong>
+                    <span className="desc">{scenario.description}</span>
+                  </div>
+                  <span className="action-tag">{scenarioRunning === scenario.id ? 'Running' : 'Replay'}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="transcript-injector">
+              <h4>Manual Speech Attribution</h4>
+              <div className="input-row">
+                <select id="speaker" value={speakerId} onChange={(item) => setSpeakerId(item.target.value)}>
+                  {snapshot.participants.map((participant) => <option key={participant.id} value={participant.id}>{participant.displayName}</option>)}
+                </select>
+                <button className="secondary-button" onClick={() => void addTranscript()}>Attribute</button>
+              </div>
+              <textarea value={customText} onChange={(item) => setCustomText(item.target.value)} aria-label="Speaker transcript" />
+            </div>
+          </div>
+        </div>
+
+        {/* GROUP 3: SETTINGS & METADATA */}
+        <div className="sidebar-group">
+          <div className="group-header">System Settings & Data</div>
+
+          {/* VISUAL VERIFICATION */}
+          <div className="sidebar-card card">
+            <h3>Visual Verification</h3>
+            <p className="settings-desc">Run consented image comparison locally inside this browser session against the webcam input feed.</p>
+            <div className="file-input-wrapper">
+              <input type="file" accept="image/*" onChange={onReferenceSelected} aria-label="Upload candidate reference image" />
+            </div>
+            {referenceName && (
+              <div className="reference-ready">
+                <span>{referenceName}</span>
+                <button className="delete-btn" onClick={clearReference}>Remove</button>
+              </div>
+            )}
+            <label className="consent-checkbox-label">
+              <input type="checkbox" checked={faceConsent} onChange={(item) => setFaceConsent(item.target.checked)} />
+              <span>I have explicit consent to run face comparison.</span>
+            </label>
+            <button className="primary-button run-biometric-btn" onClick={() => void compareReference()} disabled={!referenceUrl || !faceConsent || mediaState !== 'active'}>
+              Compare Reference Frame
+            </button>
+            {visualMessage && <div className="biometric-status-msg">{visualMessage}</div>}
+          </div>
+
+          {/* LEARNING LOOP */}
+          <div className="sidebar-card card">
+            <h3>Offline Review Logs</h3>
+            <p className="settings-desc">Save labels locally to feed the offline calibration loop. No media bytes leave the container.</p>
+            <input className="text-input" value={reviewer} onChange={(item) => setReviewer(item.target.value)} aria-label="Reviewer name" placeholder="Reviewer initials/name" />
+            <select className="select-input" value={reviewTarget} onChange={(item) => setReviewTarget(item.target.value)} aria-label="Correct participant">
+              {snapshot.participants.map((participant) => <option key={participant.id} value={participant.id}>{participant.displayName}</option>)}
+            </select>
+            <button className="secondary-button log-outcome-btn" onClick={() => void submitReview()}>Save Outcome</button>
+            {reviewMessage && <div className="outcome-status-msg">{reviewMessage}</div>}
+          </div>
+
+          {/* INVITE METADATA */}
+          <div className="sidebar-card card">
+            <h3>Candidate Invite Metadata</h3>
+            <div className="metadata-list">
+              <div className="meta-item"><span className="meta-label">Candidate</span><span className="meta-val">{snapshot.profile.name}</span></div>
+              <div className="meta-item"><span className="meta-label">Scheduled Email</span><span className="meta-val">{snapshot.profile.email}</span></div>
+              <div className="meta-item"><span className="meta-label">Calendar Subject</span><span className="meta-val">{snapshot.profile.calendarInvite}</span></div>
+              <div className="meta-item"><span className="meta-label">Scheduled Panel</span><span className="meta-val">{snapshot.profile.interviewerNames.join(', ')}</span></div>
+            </div>
+          </div>
         </div>
       </aside>
-    </section>
-
-    <section className="dashboard-grid">
-      <article className="card scenario-card">
-        <div className="section-heading"><div><p className="eyebrow">Replay controls</p><h2>Challenge the system</h2></div></div>
-        <div className="scenario-list">
-          {demoScenarios.map((scenario) => <button key={scenario.id} className="scenario-button" disabled={Boolean(scenarioRunning)} onClick={() => void runScenario(scenario.id)}>
-            <span><strong>{scenario.label}</strong><small>{scenario.description}</small></span><b>{scenarioRunning === scenario.id ? 'Running…' : 'Run'}</b>
-          </button>)}
-        </div>
-        <div className="transcript-entry">
-          <label htmlFor="speaker">Inject speaker-attributed transcript</label>
-          <div className="input-row"><select id="speaker" value={speakerId} onChange={(item) => setSpeakerId(item.target.value)}>{snapshot.participants.map((participant) => <option key={participant.id} value={participant.id}>{participant.displayName}</option>)}</select><button onClick={() => void addTranscript()}>Add</button></div>
-          <textarea value={customText} onChange={(item) => setCustomText(item.target.value)} aria-label="Speaker transcript" />
-        </div>
-      </article>
-
-      <article className="card rank-card">
-        <div className="section-heading"><div><p className="eyebrow">Multi-signal ranking</p><h2>Who is most likely the candidate?</h2></div></div>
-        <ol className="rank-list">
-          {snapshot.decision.alternatives.map((rank, index) => <li key={rank.participantId} className={index === 0 ? 'leader' : ''}>
-            <span className="rank-number">{index + 1}</span><span className="rank-name"><strong>{rank.displayName}</strong><small>{rank.supportedCategories.length ? rank.supportedCategories.join(' · ') : 'no positive evidence'}</small></span><span className="rank-score"><strong>{percentage(rank.posterior)}</strong><small>score {rank.rawScore.toFixed(2)}</small></span>
-          </li>)}
-        </ol>
-        {leader && <p className="rank-note">Current leader: <strong>{leader.displayName}</strong>. The unknown candidate baseline is always included in the probability model.</p>}
-      </article>
-
-      <article className="card evidence-card">
-        <div className="section-heading"><div><p className="eyebrow">Explainability ledger</p><h2>Why this result?</h2></div></div>
-        {decision.evidence.length ? <ul className="evidence-list">{decision.evidence.map((item) => <EvidenceRow key={`${item.id}-${item.impact}`} item={item} />)}</ul> : <p className="empty-state">No qualifying evidence has been observed yet.</p>}
-        {nonLeaders.length > 0 && <div className="why-not"><strong>Why not the alternatives?</strong>{nonLeaders.map((participant) => <span key={participant.participantId}>{participant.displayName}: {participant.evidence.filter((item) => item.impact < 0).map((item) => item.label).join(', ') || 'insufficient supporting evidence'}</span>)}</div>}
-      </article>
-
-      <article className="card privacy-card">
-        <div className="section-heading"><div><p className="eyebrow">Optional local visual signal</p><h2>Consented reference only</h2></div></div>
-        <p>Prototype visual comparison runs in this browser against the local camera frame. It is a weak, capped signal—not a production face-recognition claim.</p>
-        <input type="file" accept="image/*" onChange={onReferenceSelected} aria-label="Upload candidate reference image" />
-        {referenceName && <div className="reference-ready"><span>{referenceName}</span><button onClick={clearReference}>Delete</button></div>}
-        <label className="consent"><input type="checkbox" checked={faceConsent} onChange={(item) => setFaceConsent(item.target.checked)} /> I have consent to compare this reference for this interview.</label>
-        <button className="primary-button" onClick={() => void compareReference()} disabled={!referenceUrl || !faceConsent || mediaState !== 'active'}>Compare with local tile</button>
-        <small>{visualMessage}</small>
-      </article>
-
-      <article className="card review-card">
-        <div className="section-heading"><div><p className="eyebrow">Learning loop</p><h2>Record a reviewed outcome</h2></div></div>
-        <p>Labels are stored without raw media and feed offline calibration only.</p>
-        <input value={reviewer} onChange={(item) => setReviewer(item.target.value)} aria-label="Reviewer name" placeholder="Reviewer" />
-        <select value={reviewTarget} onChange={(item) => setReviewTarget(item.target.value)} aria-label="Correct participant">{snapshot.participants.map((participant) => <option key={participant.id} value={participant.id}>{participant.displayName}</option>)}</select>
-        <button onClick={() => void submitReview()}>Save reviewed outcome</button>
-        {reviewMessage && <small>{reviewMessage}</small>}
-      </article>
-
-      <article className="card profile-card">
-        <p className="eyebrow">External metadata</p><h2>{snapshot.profile.name}</h2>
-        <dl><div><dt>Expected email</dt><dd>{snapshot.profile.email}</dd></div><div><dt>Calendar invite</dt><dd>{snapshot.profile.calendarInvite}</dd></div><div><dt>Interviewers</dt><dd>{snapshot.profile.interviewerNames.join(' · ')}</dd></div></dl>
-        <small>Metadata is evidence, not identity proof.</small>
-      </article>
-    </section>
+    </div>
   </main>;
 }
