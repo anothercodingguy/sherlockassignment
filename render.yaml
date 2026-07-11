@@ -1,6 +1,7 @@
 services:
   - type: web
     name: sherlock-identity
+    plan: free
     runtime: node
     buildCommand: npm install && npm run build
     startCommand: npm run start
