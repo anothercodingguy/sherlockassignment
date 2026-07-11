@@ -50,7 +50,7 @@ const broadcast = (sessionId: string, snapshot: SessionSnapshot) => {
   for (const socket of sockets.get(sessionId) ?? []) sendSnapshot(socket, snapshot);
 };
 
-app.get('/health', (_request, response) => response.json({ ok: true, llmEnabled: Boolean(process.env.OPENAI_API_KEY) }));
+app.get('/health', (_request, response) => response.json({ ok: true, llmEnabled: Boolean(process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY) }));
 
 app.post('/api/sessions', (_request, response) => {
   const session = newSession();
@@ -95,18 +95,23 @@ app.post('/api/sessions/:sessionId/review', async (request, response) => {
 app.post('/api/enrich/utterance', async (request, response) => {
   const parsed = enrichRequestSchema.safeParse(request.body);
   if (!parsed.success) return response.status(400).json({ error: 'Invalid transcript payload', issues: parsed.error.flatten() });
-  if (!process.env.OPENAI_API_KEY) return response.status(503).json({ error: 'LLM enrichment is disabled. Add OPENAI_API_KEY to enable it.' });
+  const apiKey = process.env.GROQ_API_KEY ?? process.env.OPENAI_API_KEY;
+  if (!apiKey) return response.status(503).json({ error: 'LLM enrichment is disabled. Add GROQ_API_KEY or OPENAI_API_KEY to enable it.' });
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 6_000);
   try {
-    const baseUrl = (process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, '');
-    const model = process.env.OPENAI_MODEL;
-    if (!model) return response.status(503).json({ error: 'Set OPENAI_MODEL to enable LLM enrichment.' });
+    const baseUrl = process.env.GROQ_API_KEY 
+      ? 'https://api.groq.com/openai/v1' 
+      : (process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, '');
+    const model = process.env.GROQ_API_KEY 
+      ? (process.env.GROQ_MODEL ?? 'llama3-70b-8192')
+      : process.env.OPENAI_MODEL;
+    if (!model) return response.status(503).json({ error: 'Set OPENAI_MODEL (or GROQ_MODEL) to enable LLM enrichment.' });
     const upstream = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       signal: controller.signal,
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
         temperature: 0,
