@@ -27,8 +27,7 @@ export default function App() {
     return (
       <main className="loading">
         <div className="loading-mark">S</div>
-        <p>{apiState === 'error' ? error : 'Starting secure meeting sandbox…'}</p>
-        <button onClick={() => void reset()}>Retry</button>
+        <p>Starting secure meeting sandbox…</p>
       </main>
     );
   }
