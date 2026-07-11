@@ -60,7 +60,7 @@ const matchesSelfIdentification = (text: string, profile: CandidateProfile) => {
   const first = normalize(profile.name).split(' ')[0];
   const selfReference = /\b(i am|im|i m|this is|my name is)\b/;
   if (selfReference.test(normalized) && normalized.includes(full)) return 'full';
-  if (selfReference.test(normalized) && new RegExp(`\\b${first}\\b`).test(normalized)) return 'first';
+  if (first && selfReference.test(normalized) && new RegExp(`\\b${first}\\b`).test(normalized)) return 'first';
   return undefined;
 };
 
@@ -183,6 +183,7 @@ export const calculateDecision = (
   let selectedParticipantId: string | undefined;
   let detectorTargetParticipantId: string | null = null;
   let reason = 'No participant has sufficient evidence yet.';
+  let decisionUpdatedAt = now;
 
   if (enoughEvidence && top) {
     status = 'identified';
@@ -194,6 +195,7 @@ export const calculateDecision = (
     selectedParticipantId = top.participantId;
     detectorTargetParticipantId = top.participantId;
     reason = 'Retained briefly while evidence settles (hysteresis).';
+    decisionUpdatedAt = previous.updatedAt;
   } else if (top && top.rawScore >= 0.3) {
     status = 'needs_review';
     reason = !hasIndependentSupport
@@ -209,7 +211,7 @@ export const calculateDecision = (
     margin,
     evidence: top?.evidence ?? [],
     alternatives,
-    updatedAt: now,
+    updatedAt: decisionUpdatedAt,
     reason
   };
 };

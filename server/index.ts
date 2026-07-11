@@ -154,5 +154,8 @@ wss.on('connection', (socket, request) => {
   sessionSockets.add(socket);
   sockets.set(sessionId, sessionSockets);
   sendSnapshot(socket, sessions.get(sessionId)!.snapshot());
-  socket.on('close', () => sessionSockets.delete(socket));
+  socket.on('close', () => {
+    sessionSockets.delete(socket);
+    if (sessionSockets.size === 0) sockets.delete(sessionId);
+  });
 });
